@@ -92,9 +92,9 @@ void decodeChunkData(chunkRec_t* chunk, long long totalLen)
 	int i;
 	for(i=0; i<1000; i++)
 	{
-		printf("%u ", chunk->chunkDataUncompressed[i]);
+		//printf("%u ", chunk->chunkDataUncompressed[i]);
 	}
-	printf("\n");
+	//printf("\n");
 	chunk->chunkData = decodeTag(chunk->chunkDataUncompressed, totalLen);
 }
 
@@ -124,7 +124,7 @@ int main(int argc, char** argv)
 	free(locsRaw);
 	free(timestampsRaw); //done with raw data
 	int i = 0;
-	for(i = 115; i<=117; i++)
+	for(i = 0; i<1024; i++)
 	{
 		if(chunks[i].size > 0)
 		{
