@@ -5,7 +5,7 @@ struct nbtTag {
 	char* name;
 	void* payload;
 	long long payloadLength; //used for Tag_ByteArray, Tag_String, Tag_List, Tag_Compound, Tag_IntArray, and Tag_LongArray
-}
+};
 
 typedef struct nbtTag nbtTag_t;
 
@@ -33,9 +33,9 @@ int* getIntArrayTagValue(nbtTag_t tag);
 
 long* getLongArrayTagValue(nbtTag_t tag);
 
-long* setTagName(nbtTag_t tag, char* name); //used to simplify not messing up the name length
+long* setTagName(nbtTag_t tag, unsigned char* name); //used to simplify not messing up the name length
 
-char* encodeTag(nbtTag_t tag);
+unsigned char* encodeTag(nbtTag_t* tag, long long* length);
 
 //note: stops at the end of the first tag in bytes
-nbtTag_t decodeTag(char* bytes);
+nbtTag_t decodeTag(unsigned char* bytes, long long totalLen);

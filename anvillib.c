@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include "nbtlib.h"
 #include "anvillib.h"
 #include "zlib.h"
-#include "nbtlib.h"
 
 unsigned int readUnsignedBigEndian(unsigned char* data, char size)
 {
@@ -87,9 +87,15 @@ void inflateChunk(chunkRec_t* chunk)
     chunk->chunkDataUncompressed = databuf;
 }
 
-void decodeChunkData(chunkRec_t* chunk)
+void decodeChunkData(chunkRec_t* chunk, long long totalLen)
 {
-	chunk->chunkData = decodeTag(chunk->chunkDataUncompressed);
+	int i;
+	for(i=0; i<1000; i++)
+	{
+		printf("%u ", chunk->chunkDataUncompressed[i]);
+	}
+	printf("\n");
+	chunk->chunkData = decodeTag(chunk->chunkDataUncompressed, totalLen);
 }
 
 
@@ -108,7 +114,6 @@ void loadChunkData(chunkRec_t* chunk, FILE* fp)
 
 int main(int argc, char** argv)
 {
-	printf("TEST: %u", REGION_HEADER_SIZE);
 	FILE* regionFp;
 	regionFp = fopen(argv[1], "rb");
 	unsigned char* locsRaw = malloc(sizeof(char)*4096); //alloc space for loc header data
@@ -118,13 +123,14 @@ int main(int argc, char** argv)
 	chunkRec_t* chunks = parseLocHeader(locsRaw, timestampsRaw);
 	free(locsRaw);
 	free(timestampsRaw); //done with raw data
-	int i;
-	for(i = 0; i<1024; i++)
+	int i = 0;
+	for(i = 115; i<=117; i++)
 	{
 		if(chunks[i].size > 0)
 		{
 			loadChunkData(&(chunks[i]), regionFp);
 			inflateChunk(&(chunks[i]));
+			decodeChunkData(&(chunks[i]), chunks[i].sizeUncompressed);
 			printf("Chunk %u: offset=%u, size=%u, exactSize=%u, compressionScheme=%u, sizeUncompressed=%lu\n", i, chunks[i].offset, chunks[i].size, chunks[i].exactSize, chunks[i].compressionScheme, chunks[i].sizeUncompressed);
 			//break;
 		}

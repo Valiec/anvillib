@@ -54,7 +54,7 @@ int _decodeBigEndian(unsigned char* data, char size)
 char _testSystemEndianness()
 {
 	short testValue = 256;
-	char testResult = *(((char*)(&test)));
+	char testResult = *(((char*)(&testValue)));
 	return testResult;
 }
 
@@ -118,7 +118,7 @@ long* getLongArrayTagValue(nbtTag_t tag)
 	return *((long**)(tag.payload));
 }
 
-void _encodeBigEndianNumber(char* bytes, long number, char size)
+void _encodeBigEndianNumber(unsigned char* bytes, long number, char size)
 {
 	char i = size-1;
 	while(i>0)
@@ -129,18 +129,20 @@ void _encodeBigEndianNumber(char* bytes, long number, char size)
 	}
 }
 
-void _encodeBasicTagInfo(char* bytes, nbtTag_t* tag)
+void _encodeBasicTagInfo(unsigned char* bytes, nbtTag_t* tag)
 {
 	bytes[0] = tag->typeId;
 	_encodeBigEndianNumber(bytes+1, (long)(tag->nameLen), 2); //copy size
 	memcpy(bytes+3, tag->name, tag->nameLen); //copy name
 }
 
-char* _encodeTag(nbtTag_t* tag, long long* length, char isNamed)
+unsigned char* _encodeTag(nbtTag_t* tag, long long* length, char isNamed)
 {
-	char* bytes;
+	unsigned char* bytes;
 	int nameOffset = isNamed ? 3+tag->nameLen : 0;
-	switch(tag->type)
+	long long byteslen;
+	int i;
+	switch(tag->typeId)
 	{
 		case 1:
 			bytes = malloc(sizeof(char)*(nameOffset+1));
@@ -155,28 +157,28 @@ char* _encodeTag(nbtTag_t* tag, long long* length, char isNamed)
 			{
 				_encodeBasicTagInfo(bytes, tag);
 			}
-			_encodeBigEndianNumber(bytes+(nameOffset), (long)(getShortTagValue(tag)), 2);
+			_encodeBigEndianNumber(bytes+(nameOffset), (long)(getShortTagValue(*tag)), 2);
 		case 3:
 			bytes = malloc(sizeof(char)*(nameOffset+4));
 			if(isNamed)
 			{
 				_encodeBasicTagInfo(bytes, tag);
 			}
-			_encodeBigEndianNumber(bytes+(nameOffset), (long)(getShortTagValue(tag)), 4);
+			_encodeBigEndianNumber(bytes+(nameOffset), (long)(getShortTagValue(*tag)), 4);
 		case 4:
 			bytes = malloc(sizeof(char)*(nameOffset+8));
 			if(isNamed)
 			{
 				_encodeBasicTagInfo(bytes, tag);
 			}
-			_encodeBigEndianNumber(bytes+(nameOffset), (long)(getShortTagValue(tag)), 8);
+			_encodeBigEndianNumber(bytes+(nameOffset), (long)(getShortTagValue(*tag)), 8);
 		case 5:
 			bytes = malloc(sizeof(char)*(nameOffset+4));
 			if(isNamed)
 			{
 				_encodeBasicTagInfo(bytes, tag);
 			}
-			unsigned char* floatBytes = (char *)(tag->payload);
+			unsigned char* floatBytes = (unsigned char *)(tag->payload);
 			memcpy(bytes+(nameOffset), floatBytes, 4);
 			if(!_testSystemEndianness()) //little endian
 			{
@@ -196,7 +198,7 @@ char* _encodeTag(nbtTag_t* tag, long long* length, char isNamed)
 			{
 				_encodeBasicTagInfo(bytes, tag);
 			}
-			unsigned char* doubleBytes = (char *)(tag->payload);
+			unsigned char* doubleBytes = (unsigned char *)(tag->payload);
 			memcpy(bytes+(nameOffset), doubleBytes, 8);
 			if(!_testSystemEndianness()) //little endian
 			{
@@ -233,28 +235,26 @@ char* _encodeTag(nbtTag_t* tag, long long* length, char isNamed)
 				_encodeBasicTagInfo(bytes, tag);
 			}
 			_encodeBigEndianNumber(bytes+(nameOffset), (long)(tag->payloadLength), 4);
-			long long byteslen = nameOffset+4;
-			int i;
+			byteslen = nameOffset+4;
 			for(i=0; i<tag->payloadLength; i++)
 			{
 				long long length;
-				element = _encodeTag(tag->payload[i], length, 0);
+				unsigned char* element = _encodeTag(&(tag->payload[i]), &length, 0);
 				bytes = _resizeBuf(bytes, byteslen, length);
 				memcpy(bytes+byteslen, element, length);
 				byteslen += length;
 			}
 		case 10:
 			bytes = malloc(sizeof(char)*(nameOffset)); //alloc space for name only
-			long long byteslen = nameOffset;
+			byteslen = nameOffset;
 			if(isNamed)
 			{
 				_encodeBasicTagInfo(bytes, tag);
 			}
-			int i;
 			for(i=0; i<tag->payloadLength; i++)
 			{
 				long long length;
-				element = _encodeTag(tag->payload[i], length, 1);
+				unsigned char* element = _encodeTag(&(tag->payload[i]), &length, 1);
 				if(i == tag->payloadLength-1) //if last element add space for Tag_End
 				{
 					length++;
@@ -271,7 +271,6 @@ char* _encodeTag(nbtTag_t* tag, long long* length, char isNamed)
 				_encodeBasicTagInfo(bytes, tag);
 			}
 			_encodeBigEndianNumber(bytes+(nameOffset), (long)(tag->payloadLength), 4);
-			int i;
 			for(i=0; i<tag->payloadLength; i++)
 			{
 				_encodeBigEndianNumber(bytes+(nameOffset+4+(i*4)), ((int *)(tag->payload))[i], 4);
@@ -283,182 +282,254 @@ char* _encodeTag(nbtTag_t* tag, long long* length, char isNamed)
 				_encodeBasicTagInfo(bytes, tag);
 			}
 			_encodeBigEndianNumber(bytes+(nameOffset), (long)(tag->payloadLength), 4);
-			int i;
 			for(i=0; i<tag->payloadLength; i++)
 			{
 				_encodeBigEndianNumber(bytes+(nameOffset+4+(i*8)), ((long *)(tag->payload))[i], 8);
 			}
 		default:
-			fprintf(stderr, "nbtlib: error: unrecognized NBT tag type %u\n", tag->type);
+			fprintf(stderr, "nbtlib: error: unrecognized NBT tag type %u\n", tag->typeId);
 			return NULL;
 	}
 	return bytes;
 }
 
-char* encodeTag(nbtTag_t* tag, long long* length)
+unsigned char* encodeTag(nbtTag_t* tag, long long* length)
 {
 	return _encodeTag(tag, length, 1);
 }
 
-nbtTag_t _decodeTag(char* bytes, char isNamed, char tagType, long long* length)
+void _printContext(unsigned char* bytes)
+{
+	int i;
+	for(i=0;i<30;i++)
+	{
+		printf("%u ", bytes[i]);
+	}
+	printf("\n");
+}
+
+nbtTag_t _decodeTag(unsigned char* bytes, char isNamed, char tagType, long long* length, long long totalLen)
 {
 	*length = 0;
 	nbtTag_t tag;
-	tag->isNamed = isNamed;
+	tag.isNamed = isNamed;
+
+	if(1)
+	{
+		printf("======= (%d)\n", tagType);
+		_printContext(bytes);
+	}
+
 	if(tagType<0)
 	{
 		tagType = bytes[0];
 		(*length)++;
+		bytes++; //advance start pos
+		printf("------- (%d)\n", tagType);
 	}
-	bytes++; //advance start pos
 	if(isNamed && tagType != 0)
 	{
-		tag->nameLen = _decodeBigEndian(bytes, 2);
+		tag.nameLen = _decodeBigEndian(bytes, 2);
 		bytes+=2;
 		(*length)+=2;
+		tag.name = malloc(sizeof(char)*tag.nameLen+1);
+		memcpy(tag.name, bytes, tag.nameLen);
+		tag.name[tag.nameLen] = 0;
+		bytes+=tag.nameLen;
+		(*length)+=tag.nameLen;
+		printf("Named: %s\n", tag.name);
 	}
+	else
+	{
+		printf("Not Named!\n");	
+	}
+	int i;
+	tag.typeId = tagType;
 	switch(tagType)
 	{
 		case 0:
-			return tag;
+			printf("Found Tag_End\n");
+			break;
 		case 1:
-			char data = bytes[0];
+			printf("Found Tag_Byte\n");
+			char dataChar = bytes[0];
 			(*length)++;
+			break;
 		case 2:
-			short data = (short)_decodeBigEndian(bytes, 2);
+			printf("Found Tag_Short\n");
+			short dataShort = (short)_decodeBigEndian(bytes, 2);
 			(*length)+=2;
+			break;
 		case 3:
-			int data = (int)_decodeBigEndian(bytes, 4);
+			printf("Found Tag_Int\n");
+			int dataInt = (int)_decodeBigEndian(bytes, 4);
 			(*length)+=4;
+			break;
 		case 4:
-			long data = (long)_decodeBigEndian(bytes, 8);
+			printf("Found Tag_Long\n");
+			long dataLong = (long)_decodeBigEndian(bytes, 8);
 			(*length)+=8;
+			break;
 		case 5:
-			void* dataRaw = malloc(4*sizeof(char));
-			memcpy(dataRaw, bytes, 4);
+			printf("Found Tag_Float\n");
+			unsigned char* dataRawFloat = malloc(4*sizeof(char));
+			memcpy(dataRawFloat, bytes, 4);
 			if(!_testSystemEndianness()) //little endian
 			{
 				//reverse byte order
 				char i;
 				for(i=0; i<4; i++)
 				{
-					char tmp;
-					tmp = dataRaw[i];
-					dataRaw[i] = dataRaw[3-i];
-					dataRaw[3-i] = tmp;
+					unsigned char tmp;
+					tmp = dataRawFloat[i];
+					dataRawFloat[i] = dataRawFloat[3-i];
+					dataRawFloat[3-i] = tmp;
 				}
 			}
-			float data = *((float *)(dataRaw));
-			free(dataRaw);
+			float dataFloat = *((float *)(dataRawFloat));
+			free(dataRawFloat);
 			(*length)+=4;
+			break;
 		case 6:
-			void* dataRaw = malloc(8*sizeof(char));
-			memcpy(dataRaw, bytes, 8);
+			printf("Found Tag_Double\n");
+			unsigned char* dataRawDouble = malloc(8*sizeof(char));
+			memcpy(dataRawDouble, bytes, 8);
 			if(!_testSystemEndianness()) //little endian
 			{
 				//reverse byte order
 				char i;
 				for(i=0; i<8; i++)
 				{
-					char tmp;
-					tmp = dataRaw[i];
-					dataRaw[i] = dataRaw[7-i];
-					dataRaw[7-i] = tmp;
+					unsigned char tmp;
+					tmp = dataRawDouble[i];
+					dataRawDouble[i] = dataRawDouble[7-i];
+					dataRawDouble[7-i] = tmp;
 				}
 			}
-			float data = *((float *)(dataRaw));
-			free(dataRaw);
+			float dataDouble = *((float *)(dataRawDouble));
+			free(dataRawDouble);
 			(*length)+=8;
+			break;
 		case 7:
-			tag->payloadLength = (int)_decodeBigEndian(bytes, 4);
+			printf("Found Tag_ByteArray\n");
+			tag.payloadLength = (int)(_decodeBigEndian(bytes, 4));
 			bytes+=4;
 			(*length)+=4;
-			char* data = malloc(tag->payloadLength*sizeof(char));
-			memcpy(data, bytes, tag->payloadLength);
-			(*length)+=tag->payloadLength;
+			printf("Length: %lld\n", tag.payloadLength);
+			char* data = malloc(tag.payloadLength*sizeof(char));
+			memcpy(data, bytes, tag.payloadLength);
+			(*length)+=tag.payloadLength;
+			break;
 		case 8:
-			tag->payloadLength = (int)_decodeBigEndian(bytes, 2);
+			printf("Found Tag_String\n");
+			tag.payloadLength = (int)(_decodeBigEndian(bytes, 2));
 			bytes+=2;
-			char* data = malloc(tag->payloadLength*sizeof(char)+1);
-			memcpy(data, bytes, tag->payloadLength);
-			data[tag->payloadLength] = 0; //null-terminate
-			(*length)+=tag->payloadLength;
+			(*length)+=2;
+			char* dataStr = malloc(tag.payloadLength*sizeof(char)+1);
+			memcpy(dataStr, bytes, tag.payloadLength);
+			dataStr[tag.payloadLength] = 0; //null-terminate
+			(*length)+=tag.payloadLength;
+			printf("Content: %s\n", (char *)(dataStr));
+			break;
 		case 9:
+			printf("Found Tag_List\n");
 			char payloadType = bytes[0];
 			bytes++;
 			(*length)++;
-			tag->payloadLength = (int)_decodeBigEndian(bytes, 4);
+			tag.payloadLength = (int)(_decodeBigEndian(bytes, 4));
 			bytes+=4;
 			(*length)+=4;
-			nbtTag_t* data = malloc(tag->payloadLength*sizeof(nbtTag_t));
-			int i;
-			for(i=0; i<tag->payloadLength; i++)
+			nbtTag_t* dataTags = malloc(tag.payloadLength*sizeof(nbtTag_t));
+			printf("Length: %lld\n", tag.payloadLength);
+			if(tag.payloadLength > 0)
 			{
-				long long elementLen = 0;
-				data[i] = _decodeTag(bytes, 0, payloadType, &elementLen);
-				bytes+=elementLen;
-				(*length)+=elementLen;
+				for(i=0; i<tag.payloadLength; i++)
+				{
+					long long elementLen = 0;
+					dataTags[i] = _decodeTag(bytes, 0, payloadType, &elementLen, totalLen);
+					bytes+=elementLen;
+					(*length)+=elementLen;
+				}
 			}
+			else
+			{
+				if(bytes[0] == 0) //handle empty-lists 
+				{
+					bytes++;
+					(*length)++;
+					printf("Blank TagList!\n");
+				}
+			}
+			break;
 		case 10:
-			char payloadType = bytes[0];
-			bytes++;
-			(*length)++;
-			tag->payloadLength = (int)_decodeBigEndian(bytes, 4);
-			bytes+=4;
-			(*length)+=4;
-			nbtTag_t* data = malloc(4*sizeof(nbtTag_t));
+			printf("Found Tag_Compound\n");
+			nbtTag_t* dataCompound = malloc(4*sizeof(nbtTag_t));
 			long long dataBufLen = 4;
-			int i = 0;
+			i = 0;
 			while(1)
 			{
 				long long elementLen = 0;
-				nbtTag_t newTag = _decodeTag(bytes, 1, -1, &elementLen);
+				nbtTag_t newTag = _decodeTag(bytes, 1, -1, &elementLen, totalLen);
 				bytes+=elementLen;
 				(*length)+=elementLen;
-				if(newTag.tagType == 0)
+				if(newTag.typeId == 0)
 				{
+					printf("Tag_Compound done!\n");	
 					break;
 				}
 				else
 				{
+					printf("Tag found! type: %u, length: %llu\n", newTag.typeId, elementLen);		
 					if(i>=dataBufLen)
 					{
-						data = _resizeBuf(data, dataBufLen, 4);
+						dataCompound = (nbtTag_t *)(_resizeBuf((unsigned char *)dataCompound, dataBufLen, 4));
 					}
-					data[i] = newTag;
+					dataCompound[i] = newTag;
 				}
 				i++;
 			}
-			tag->payloadLength = i;
+			tag.payloadLength = i;
+			break;
 		case 11:
-			tag->payloadLength = (int)_decodeBigEndian(bytes, 4);
+			printf("Found Tag_IntArray\n");
+			tag.payloadLength = (int)_decodeBigEndian(bytes, 4);
 			bytes+=4;
-			int* data = malloc(tag->payloadLength*sizeof(char)*4);
-			int i;
-			for(i=0; i<tag->payloadLength; i++)
+			(*length)+=4;
+			printf("Length: %lld\n", tag.payloadLength);
+			int* dataIntArr = malloc(tag.payloadLength*sizeof(char)*4);
+			for(i=0; i<tag.payloadLength; i++)
 			{
-				data[i] = _decodeBigEndian(bytes, 4);
+				dataIntArr[i] = _decodeBigEndian(bytes, 4);
 				bytes+=4;
+				(*length)+=4;
 			}
+			break;
 		case 12:
-			tag->payloadLength = (int)_decodeBigEndian(bytes, 4);
+			printf("Found Tag_LongArray\n");
+			tag.payloadLength = (int)_decodeBigEndian(bytes, 4);
 			bytes+=4;
-			long* data = malloc(tag->payloadLength*sizeof(char)*8);
-			int i;
-			for(i=0; i<tag->payloadLength; i++)
+			(*length)+=4;
+			printf("Length: %lld\n", tag.payloadLength);
+			long* dataLongArr = malloc(tag.payloadLength*sizeof(char)*8);
+			for(i=0; i<tag.payloadLength; i++)
 			{
-				data[i] = _decodeBigEndian(bytes, 8);
+				dataLongArr[i] = _decodeBigEndian(bytes, 8);
 				bytes+=8;
+				(*length)+=8;
 			}
+			break;
 		default:
 			fprintf(stderr, "nbtlib: error: unrecognized NBT tag type %u\n", tagType);
-			return NULL;
+			tag.typeId = -1;
+			return tag;
 	}
+	printf("Tag done! %llu/%llu\n", *length, totalLen);
+	fflush(stdout);
 	return tag;
 }
 
-nbtTag_t decodeTag(char* bytes)
+nbtTag_t decodeTag(unsigned char* bytes, long long totalLen)
 {
 	long long length = 0;
-	return _decodeTag(bytes, 0, -1, &length); //-1 means tag type undetermined
+	return _decodeTag(bytes, 1, -1, &length, totalLen); //-1 means tag type undetermined
 }
