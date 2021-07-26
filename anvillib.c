@@ -1,24 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include "anvillib.h"
 #include "zlib.h"
-
-#define REGION_HEADER_SIZE 2192
-#define END_LOC_HEADER_POS 4096
-
-#define CHUNK_LOC_OFFSET(x, y) 4*((x&31)*(z&31)*32)
-
-struct chunkRec {
-	unsigned int offset;
-	unsigned char size;
-	unsigned int timestamp;
-	unsigned char* chunkDataCompressed;
-	unsigned char* chunkDataUncompressed;
-	unsigned int exactSize;
-	unsigned long sizeUncompressed;
-	unsigned char compressionScheme;
-};
-
-typedef struct chunkRec chunkRec_t;
+#include "nbtlib.h"
 
 unsigned int readUnsignedBigEndian(unsigned char* data, char size)
 {
@@ -118,6 +102,7 @@ void loadChunkData(chunkRec_t* chunk, FILE* fp)
 
 int main(int argc, char** argv)
 {
+	printf("TEST: %u", REGION_HEADER_SIZE);
 	FILE* regionFp;
 	regionFp = fopen(argv[1], "rb");
 	unsigned char* locsRaw = malloc(sizeof(char)*4096); //alloc space for loc header data
