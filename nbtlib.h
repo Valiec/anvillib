@@ -1,5 +1,6 @@
 struct nbtTag {
 	char typeId;
+	char isNamed;
 	unsigned short nameLen;
 	char* name;
 	void* payload;

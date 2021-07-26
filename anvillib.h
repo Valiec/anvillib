@@ -12,6 +12,7 @@ struct chunkRec {
 	unsigned int exactSize;
 	unsigned long sizeUncompressed;
 	unsigned char compressionScheme;
+	nbtTag_t chunkData;
 };
 
 typedef struct chunkRec chunkRec_t;

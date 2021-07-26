@@ -87,6 +87,12 @@ void inflateChunk(chunkRec_t* chunk)
     chunk->chunkDataUncompressed = databuf;
 }
 
+void decodeChunkData(chunkRec_t* chunk)
+{
+	chunk->chunkData = decodeTag(chunk->chunkDataUncompressed);
+}
+
+
 void loadChunkData(chunkRec_t* chunk, FILE* fp)
 {
 	fseek(fp, (chunk->offset)*4096, SEEK_SET);
