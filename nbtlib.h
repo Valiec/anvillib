@@ -1,10 +1,14 @@
+#ifndef ANVILLIB_NBTLIB_H
+#define ANVILLIB_NBTLIB_H
+
 struct nbtTag {
-	char typeId;
-	char isNamed;
-	unsigned short nameLen;
-	char* name;
-	void* payload;
-	long long payloadLength; //used for Tag_ByteArray, Tag_String, Tag_List, Tag_Compound, Tag_IntArray, and Tag_LongArray
+    char typeId;
+    char isNamed;
+    unsigned short nameLen;
+    char* name;
+    void* payload;
+    char payloadTagType;
+    long long payloadLength; //used for Tag_ByteArray, Tag_String, Tag_List, Tag_Compound, Tag_IntArray, and Tag_LongArray
 };
 
 typedef struct nbtTag nbtTag_t;
@@ -38,4 +42,8 @@ long* setTagName(nbtTag_t tag, unsigned char* name); //used to simplify not mess
 unsigned char* encodeTag(nbtTag_t* tag, long long* length);
 
 //note: stops at the end of the first tag in bytes
-nbtTag_t decodeTag(unsigned char* bytes, long long totalLen);
+nbtTag_t decodeTag(unsigned char* bytes);
+
+void freeTag(nbtTag_t* tag);
+
+#endif //ANVILLIB_NBTLIB_H
