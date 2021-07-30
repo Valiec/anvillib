@@ -52,4 +52,6 @@ blockData_t getBlockIdInChunk(chunkRec_t chunk, int x, int y, int z, int* exitco
 
 void freeChunk(chunkRec_t* chunk);
 
+//void writeChunk(chunkRec_t chunk, chunkRec_t* header, int chunkIndex, FILE* fp);
+
 #endif //ANVILLIB_ANVILLIB_H

@@ -7,7 +7,7 @@
 int main(int argc, char** argv)
 {
     FILE* regionFp;
-    regionFp = fopen(argv[1], "rb");
+    regionFp = fopen(argv[1], "rb+");
     unsigned char* locsRaw = malloc(sizeof(char)*4096); //alloc space for loc header data
     unsigned char* timestampsRaw = malloc(sizeof(char)*4096); //alloc space for loc header data
     fread(locsRaw, sizeof(char), 4096, regionFp); //read the header
@@ -59,27 +59,27 @@ int main(int argc, char** argv)
     }
     printf("\n");*/
 
-    for(i = 10; i<15; i++)
+    for(i = 0; i<1024; i++)
     {
         if(chunks[i].size > 0)
         {
             loadChunkData(&(chunks[i]), regionFp);
             inflateChunk(&(chunks[i]));
-            //printf("inflating!\n");
+            printf("inflating!\n");
             decodeChunkData(&(chunks[i]));
-            //printf("decoding!\n");
-            //printf("Chunk %u: offset=%u, size=%u, exactSize=%u, compressionScheme=%u, sizeUncompressed=%lu\n", i, chunks[i].offset, chunks[i].size, chunks[i].exactSize, chunks[i].compressionScheme, chunks[i].sizeUncompressed);
-            //printf("encoding!\n");
+            printf("decoding!\n");
+            printf("Chunk %u: offset=%u, size=%u, exactSize=%u, compressionScheme=%u, sizeUncompressed=%lu\n", i, chunks[i].offset, chunks[i].size, chunks[i].exactSize, chunks[i].compressionScheme, chunks[i].sizeUncompressed);
+            printf("encoding!\n");
             encodeChunkData(&(chunks[i]));
-            //printf("deflating!\n");
+            printf("deflating!\n");
             deflateChunk(&(chunks[i]));
-            //printf("inflating (again)!\n");
+            printf("inflating (again)!\n");
             inflateChunk(&(chunks[i]));
-            //printf("decoding (again)!\n");
+            printf("decoding (again)!\n");
             decodeChunkData(&(chunks[i]));
-            //printf("encoding (again)!\n");
+            printf("encoding (again)!\n");
             encodeChunkData(&(chunks[i]));
-            //printf("deflating! (again)\n");
+            printf("deflating! (again)\n");
             deflateChunk(&(chunks[i]));
             //break;
         }
@@ -89,14 +89,16 @@ int main(int argc, char** argv)
     int y = 0;
     for(y=0; y<255; y++)
     {
-        blockData_t block = getBlockIdInChunk(chunks[11], 12, y, 4, &exitcode);
-        //printf("Block: %u, %u\n", block.id, block.meta);
+        blockData_t block = getBlockIdInChunk(chunks[12], 12, y, 4, &exitcode);
+        printf("Block: %u, %u\n", block.id, block.meta);
     }
     for(i = 0; i<1024; i++)
     {
+        //writeChunk(chunks[i], chunks, i, regionFp);
         freeChunk(&(chunks[i]));
     }
     free(chunks);
+    fclose(regionFp);
     return 0;
 
 }

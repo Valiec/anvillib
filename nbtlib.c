@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "endian.h"
 #include "nbtlib.h"
 
 /*
@@ -21,6 +22,22 @@ Tag types:
 12: Tag_LongArray
 
 */
+
+void _printContext(unsigned char* bytes)
+{
+    bytes-=10;
+    int i;
+    for(i=0;i<10;i++)
+    {
+        printf("%u ", bytes[i]);
+    }
+    printf("| ");
+    for(i=10;i<30;i++)
+    {
+        printf("%u ", bytes[i]);
+    }
+    printf("\n");
+}
 
 unsigned char* _resizeBuf(unsigned char* block, unsigned long size, unsigned long long step)
 {
@@ -44,30 +61,6 @@ nbtTag_t* _resizeBufNbt(nbtTag_t* block, unsigned long size, unsigned long long 
     }
     free(block);
     return newBlock;
-}
-
-int _decodeBigEndian(unsigned char* data, char size)
-{
-    int value = 0;
-    char i;
-    for(i=0; i<size; i++)
-    {
-        char theByte = *(data+i);
-        //printf("%u/", theByte);
-        value = value * 256; //left shift last byte
-        value |= theByte;
-    }
-    //printf("\n Value is: %u\n", value);
-    return value;
-}
-
-// tests system endianness by looking at the lower-addressed byte of a short containing the value 256 (0x0100)
-// this byte will be 1 in big-endian systems and 0 in little-endian systems
-char _testSystemEndianness()
-{
-    short testValue = 256;
-    char testResult = *(((char*)(&testValue)));
-    return testResult;
 }
 
 char getByteTagValue(nbtTag_t tag)
@@ -128,17 +121,6 @@ int* getIntArrayTagValue(nbtTag_t tag)
 long* getLongArrayTagValue(nbtTag_t tag)
 {
     return *((long**)(tag.payload));
-}
-
-void _encodeBigEndianNumber(unsigned char* bytes, long number, char size)
-{
-    char i = size-1;
-    while(i>=0)
-    {
-        bytes[i] = number & 255;
-        number = number/256;
-        i--;
-    }
 }
 
 void _encodeBasicTagInfo(unsigned char* bytes, nbtTag_t* tag)
@@ -231,7 +213,7 @@ unsigned char* _encodeTag(nbtTag_t* tag, long long* length, char isNamed)
             {
                 //reverse byte order
                 char i;
-                for(i=0; i<4; i++)
+                for(i=0; i<2; i++)
                 {
                     char tmp;
                     tmp = bytes[(nameOffset)+i];
@@ -258,7 +240,7 @@ unsigned char* _encodeTag(nbtTag_t* tag, long long* length, char isNamed)
             {
                 //reverse byte order
                 char i;
-                for(i=0; i<8; i++)
+                for(i=0; i<4; i++)
                 {
                     char tmp;
                     tmp = bytes[(nameOffset)+i];
@@ -268,16 +250,16 @@ unsigned char* _encodeTag(nbtTag_t* tag, long long* length, char isNamed)
             }
             break;
         case 7:
-            /*printf("Found Tag_ByteArray");
+            /*("Found Tag_ByteArray");
             if(tag->isNamed && tag->nameLen > 0) {
                 printf(", name: %s", tag->name);
             }
-            printf(", payloadLength: %llu, ", tag->payloadLength);
+            printf(", payloadLength: %llu, ", tag->payloadLength);*/
             for(z=0; z<tag->payloadLength; z++)
             {
                 //printf("%u ", ((char*)tag->payload)[z]);
             }
-            printf("\n");*/
+            //printf("\n");
             bytes = malloc(sizeof(char)*(nameOffset+4+(tag->payloadLength)));
             if(isNamed)
             {
@@ -296,7 +278,7 @@ unsigned char* _encodeTag(nbtTag_t* tag, long long* length, char isNamed)
             {
                 //printf("%u ", *(bytes+(nameOffset+4+iii)));
             }
-            //("\n");
+            //printf("\n");
             byteslen = nameOffset+4+(tag->payloadLength);
             break;
         case 8:
@@ -359,30 +341,25 @@ unsigned char* _encodeTag(nbtTag_t* tag, long long* length, char isNamed)
                 unsigned char* element = _encodeTag(&(((nbtTag_t *)(tag->payload))[i]), &compoundElementLength, 1);
                 bytes = _resizeBuf(bytes, byteslen, ((i == tag->payloadLength-1) ? compoundElementLength+1 : compoundElementLength));
                 memcpy(bytes+byteslen, element, compoundElementLength);
-                if(i == tag->payloadLength-1) //if last element add space for Tag_End
-                {
-                    compoundElementLength++;
-                }
                 byteslen += compoundElementLength;
-                if(i == tag->payloadLength-1) //if last element add Tag_End
-                {
-                    bytes[byteslen-1] = 0; //add Tag_End
-                }
                 free(element);
             }
-            //printf("End Tag_Compound\n");
+            bytes = _resizeBuf(bytes, byteslen, 1);
+            byteslen++;
+            bytes[byteslen-1] = 0; //add Tag_End
+            //("End Tag_Compound\n");
             break;
         case 11:
             /*printf("Found Tag_IntArray");
             if(tag->isNamed && tag->nameLen > 0) {
                 printf(", name: %s", tag->name);
             }
-            printf(", payloadLength: %llu, ", tag->payloadLength);
+            printf(", payloadLength: %llu, ", tag->payloadLength);*/
             for(z=0; z<tag->payloadLength; z++)
             {
                 //printf("%u ", ((int*)tag->payload)[z]);
             }
-            printf("\n");*/
+            //printf("\n");
             bytes = malloc(sizeof(char)*(nameOffset+4+(tag->payloadLength*4)));
             if(isNamed)
             {
@@ -422,8 +399,9 @@ unsigned char* _encodeTag(nbtTag_t* tag, long long* length, char isNamed)
             fprintf(stderr, "nbtlib: error: unrecognized NBT tag type %u\n", tag->typeId);
             return NULL;
     }
-    //printf("====================================\n");
+    //_printContext(bytes);
     (*length)+=byteslen;
+    //printf("==================================== (tag length: %llu)\n", byteslen);
     return bytes;
 }
 
@@ -435,6 +413,7 @@ unsigned char* encodeTag(nbtTag_t* tag, long long* length)
 
 nbtTag_t _decodeTag(unsigned char* bytes, char isNamed, char tagType, long long* length)
 {
+    //_printContext(bytes);
     *length = 0;
     nbtTag_t tag;
     tag.typeId = -1; //placeholder for errors
@@ -510,7 +489,7 @@ nbtTag_t _decodeTag(unsigned char* bytes, char isNamed, char tagType, long long*
             {
                 //reverse byte order
                 char i;
-                for(i=0; i<4; i++)
+                for(i=0; i<2; i++)
                 {
                     unsigned char tmp;
                     tmp = dataRawFloat[i];
@@ -519,7 +498,7 @@ nbtTag_t _decodeTag(unsigned char* bytes, char isNamed, char tagType, long long*
                 }
             }
             float* dataFloat = malloc(sizeof(float));
-            *dataFloat = *((double *)(dataRawFloat));
+            *dataFloat = *((float *)(dataRawFloat));
             free(dataRawFloat);
             (*length)+=4;
             tag.payload = (void*)(dataFloat);
@@ -533,7 +512,7 @@ nbtTag_t _decodeTag(unsigned char* bytes, char isNamed, char tagType, long long*
             {
                 //reverse byte order
                 char i;
-                for(i=0; i<8; i++)
+                for(i=0; i<4; i++)
                 {
                     unsigned char tmp;
                     tmp = dataRawDouble[i];
@@ -575,6 +554,7 @@ nbtTag_t _decodeTag(unsigned char* bytes, char isNamed, char tagType, long long*
             ; //empty statement because you can't start a case with a declaration
             char payloadType = bytes[0];
             tag.payloadTagType = payloadType;
+            //printf("Payload type: %u\n", payloadType);
             bytes++;
             (*length)++;
             tag.payloadLength = (int)(_decodeBigEndian(bytes, 4));
@@ -604,7 +584,7 @@ nbtTag_t _decodeTag(unsigned char* bytes, char isNamed, char tagType, long long*
             tag.payload = (void*)(dataTags);
             break;
         case 10:
-            //printf("@@@@@@@@@@@@@@@@ Found Tag_Compound, interior nesting level will be %u\n", nestingLevel+1);
+            //printf("@@@@@@@@@@@@@@@@ Found Tag_Compound\n");//, interior nesting level will be %u\n", nestingLevel+1);
             ; //empty statement because you can't start a case with a declaration
             nbtTag_t* dataCompound = malloc(4*sizeof(nbtTag_t));
             long long dataBufLen = 4;
@@ -617,7 +597,7 @@ nbtTag_t _decodeTag(unsigned char* bytes, char isNamed, char tagType, long long*
                 (*length)+=elementLen;
                 if(newTag.typeId == 0)
                 {
-                    //printf("@@@@@@@@@@@@@@@@ Tag_Compound done! Nesting level back to %u\n", nestingLevel);
+                    //printf("@@@@@@@@@@@@@@@@ Tag_Compound done!\n");//Nesting level back to %u\n", nestingLevel);
                     break;
                 }
                 else
@@ -666,13 +646,13 @@ nbtTag_t _decodeTag(unsigned char* bytes, char isNamed, char tagType, long long*
             tag.payload = (void*)(dataLongArr);
             break;
         default:
-            //fprintf(stderr, "nbtlib: error: unrecognized NBT tag type %u\n", tagType);
+            fprintf(stderr, "nbtlib: error: unrecognized NBT tag type %u\n", tagType);
             tag.typeId = -1;
             return tag;
     }
     if(tag.typeId > 12 || tag.typeId < 0)
     {
-        printf("BAD TAG!!! Type: %d\n", tag.typeId);
+        //printf("BAD TAG!!! Type: %d\n", tag.typeId);
     }
     //printf("Tag done! %llu/%llu, nesting level: %u, in list: %u\n", *length, totalLen, nestingLevel, inList);
     return tag;
