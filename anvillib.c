@@ -23,14 +23,22 @@ int compareChunks (const void * c1, const void * c2) {
     }
 }
 
-/*void writeChunk(chunkRec_t chunk, chunkRec_t* header, int chunkIndex, FILE* fp)
+int writeChunk(chunkRec_t chunk, chunkRec_t* header, int chunkIndex, FILE* fp)
 {
+
+    if(chunk._compressedDataOutdated)
+    {
+        return 1;
+    }
+
     unsigned int chunkSize = (4096*chunk.size);
-    unsigned int chunkSizeBlocks = chunk.size;
+    unsigned int chunkSizeBlocks;
     unsigned long chunkOffset = 4096*chunk.offset;
     char found = 1;
+    //printf("Writing chunk %u, size %u, blockSize %u, offset %lu, .offset %u, .size %u\n", chunkIndex, chunk.exactSize, chunkSize, chunkOffset, chunk.offset, chunk.size);
     if(chunkSize < chunk.exactSize+5)
     {
+        //printf("too big!\n");
         found = 0;
         chunkSizeBlocks = chunk.exactSize/4096;
         if(chunk.exactSize%4096)
@@ -78,10 +86,12 @@ int compareChunks (const void * c1, const void * c2) {
     unsigned char* sizeEncoded = malloc(4);
     _encodeBigEndianNumber(sizeEncoded, size, 4);
     fwrite(sizeEncoded, sizeof(char), 4, fp);
+    free(sizeEncoded);
     fwrite(&compressionType, sizeof(char), 1, fp);
     fwrite(chunk.chunkDataCompressed, sizeof(char), chunk.exactSize, fp);
     if(!found) //if chunk at end
     {
+        printf("at end!\n");
         int i;
         unsigned char* zeroes = malloc(((chunk.size*4096)-chunk.exactSize)*sizeof(char));
         for(i=0; i<((chunk.size*4096)-chunk.exactSize); i++)
@@ -91,7 +101,8 @@ int compareChunks (const void * c1, const void * c2) {
         fwrite(zeroes, sizeof(char), (chunk.size*4096)-chunk.exactSize, fp);
         free(zeroes);
     }
-}*/
+    return 0;
+}
 
 chunkRec_t parseHeaderEntry(unsigned char* locs, unsigned char* timestamps)
 {
@@ -102,6 +113,10 @@ chunkRec_t parseHeaderEntry(unsigned char* locs, unsigned char* timestamps)
     headerEntry._compressedDataExists = 0;
     headerEntry._uncompressedDataExists = 0;
     headerEntry._nbtDataExists = 0;
+    headerEntry._blockDataExists = 0;
+    headerEntry._uncompressedDataOutdated = 0;
+    headerEntry._compressedDataOutdated = 0;
+    headerEntry._nbtDataOutdated = 0;
     return headerEntry;
 }
 
@@ -168,10 +183,20 @@ void inflateChunk(chunkRec_t* chunk)
     }
     chunk->chunkDataUncompressed = databuf;
     chunk->_uncompressedDataExists = 1;
+    if(chunk->_nbtDataExists)
+    {
+        chunk->_nbtDataOutdated = 1;
+    }
 }
 
-void deflateChunk(chunkRec_t* chunk)
+int deflateChunk(chunkRec_t* chunk)
 {
+
+    if(chunk->_uncompressedDataOutdated)
+    {
+        return 1;
+    }
+
     int returnVal;
     //printf("Deflating chunk of size %lu, to an estimated %u\n", chunk->sizeUncompressed, chunk->exactSize);
     //unsigned long outputLen;
@@ -197,6 +222,7 @@ void deflateChunk(chunkRec_t* chunk)
         stream.next_out = databuf+buflen;
         stream.avail_out += chunkSize;
         buflen += chunkSize;
+        chunk->exactSize += chunkSize;
         returnVal = deflate(&stream, Z_FINISH); //compress
     }
     //printf("decompressed... return val: %d, avail_out: %u, avail_in: %u\n", returnVal, stream.avail_out, stream.avail_in);
@@ -208,6 +234,8 @@ void deflateChunk(chunkRec_t* chunk)
     }
     chunk->chunkDataCompressed = databuf;
     chunk->_compressedDataExists = 1;
+    chunk->_compressedDataOutdated = 0;
+    return 0;
 }
 
 void decodeChunkData(chunkRec_t* chunk)
@@ -219,10 +247,12 @@ void decodeChunkData(chunkRec_t* chunk)
     }
     chunk->chunkData = decodeTag(chunk->chunkDataUncompressed);
     chunk->_nbtDataExists = 1;
+    chunk->_nbtDataOutdated = 1;
 }
 
 void encodeChunkData(chunkRec_t* chunk)
 {
+
     if(chunk->_uncompressedDataExists)
     {
         free(chunk->chunkDataUncompressed);
@@ -236,8 +266,134 @@ void encodeChunkData(chunkRec_t* chunk)
     {
         //fprintf(stderr, "%u\n", chunk->chunkDataUncompressed[i]);
     }
+    chunk->_uncompressedDataOutdated = 0;
+    chunk->_compressedDataOutdated = 1;
 }
 
+
+int initBlockData(chunkRec_t* chunk)
+{
+
+    if(chunk->size == 0) //chunk not present
+    {
+        return 1;
+    }
+
+    nbtTag_t rootTag = chunk->chunkData;
+    int i, j;
+    printf("root tag payload length is %lld\n", rootTag.payloadLength);
+    nbtTag_t levelTag;
+    for(i=0;i<rootTag.payloadLength; i++) //needed because mods can stick extra tags here
+    {
+        nbtTag_t tag = ((nbtTag_t*)(rootTag.payload))[i];
+        printf("root tag child tag %d name is %s\n", i, tag.name);
+        fflush(stdout);
+        if(strcmp(tag.name, "Level") == 0)
+        {
+            levelTag = tag;
+            break;
+        }
+    }
+    nbtTag_t sectionsTag;
+
+    printf("level tag payload length is %lld\n", levelTag.payloadLength);
+    fflush(stdout);
+
+    for(i=0;i<levelTag.payloadLength; i++)
+    {
+        nbtTag_t tag = ((nbtTag_t*)(levelTag.payload))[i];
+        printf("level tag child tag %d name is %s\n", i, tag.name);
+        fflush(stdout);
+
+        if(strcmp(tag.name, "Sections") == 0)
+        {
+            sectionsTag = tag;
+            break;
+        }
+
+        if(strcmp(tag.name, "Entities") == 0)
+        {
+            char* val = malloc(1);
+            *val = 0;
+            tag.payloadTagType = 1;
+            tag.payloadLength = 0;
+            tag.payload = val;
+            tag.payload = (void *)val;
+            ((nbtTag_t*)(levelTag.payload))[i] = tag;
+        }
+
+        if(strcmp(tag.name, "TileEntities") == 0)
+        {
+            char* val = malloc(1);
+            *val = 0;
+            tag.payloadTagType = 1;
+            tag.payloadLength = 0;
+            tag.payload = val;
+            tag.payload = (void *)val;
+            ((nbtTag_t*)(levelTag.payload))[i] = tag;
+        }
+    }
+    nbtTag_t** blocksTags = malloc(16*sizeof(nbtTag_t *));
+    nbtTag_t** addTags = malloc(16*sizeof(nbtTag_t *));
+    nbtTag_t** dataTags = malloc(16*sizeof(nbtTag_t *));
+    unsigned char* hasAdd = malloc(16*sizeof(char));
+    unsigned char* sectionPresent = malloc(16*sizeof(char));
+    for(i=0; i<16; i++)
+    {
+        sectionPresent[i] = 0;
+        hasAdd[i] = 0;
+    }
+    for(i=0;i<sectionsTag.payloadLength; i++)
+    {
+        nbtTag_t sectionTag = ((nbtTag_t*)(sectionsTag.payload))[i];
+        nbtTag_t yTag;
+        for(j=0;j<sectionTag.payloadLength; j++)
+        {
+            nbtTag_t tag = ((nbtTag_t*)(sectionTag.payload))[j];
+            if(strcmp(tag.name, "Y") == 0)
+            {
+                yTag = tag;
+                break;
+            }
+        }
+        unsigned char ind = (*((unsigned char*)(yTag.payload)));
+        sectionPresent[ind] = 1;
+        printf("section %u present\n", ind);
+        for(j=0;j<sectionTag.payloadLength; j++)
+        {
+            nbtTag_t* tag = ((nbtTag_t*)(sectionTag.payload))+j;
+            hasAdd[ind] = 0;
+            if(strcmp(tag->name, "Blocks") == 0)
+            {
+                //printf("found blocks, writing at index %u\n", ind);
+                blocksTags[ind] = tag;
+            }
+            if(strcmp(tag->name, "Add") == 0)
+            {
+                //printf("found add, writing at index %u\n", ind);
+                addTags[ind] = tag;
+                hasAdd[ind] = 1;
+            }
+            if(strcmp(tag->name, "Data") == 0)
+            {
+                //printf("found data, writing at index %u\n", ind);
+                dataTags[ind] = tag;
+            }
+        }
+    }
+    chunk->_blockDataExists = 1;
+    chunk->blockIds = blocksTags;
+    chunk->blockAdd = addTags;
+    chunk->blockMeta = dataTags;
+    chunk->hasAdd = hasAdd;
+    chunk->sectionPresent = sectionPresent;
+    for(i = 0; i<16; i++)
+    {
+        printf("section %u listed as %u\n", i, chunk->sectionPresent[i]);
+    }
+    return 0;
+
+}
 
 //gets a block ID and meta given a chunk and block coords within that chunk (0<x<16, 0<z<16, 0<y<256)
 //does not validate the block coords make any sense
@@ -258,86 +414,35 @@ blockData_t getBlockIdInChunk(chunkRec_t chunk, int x, int y, int z, int* exitco
         return fail;
     }
 
-    nbtTag_t rootTag = chunk.chunkData;
-    nbtTag_t levelTag = ((nbtTag_t*)(rootTag.payload))[0]; //there's only one tag
-    nbtTag_t sectionsTag;
-    int i, j;
-    for(i=0;i<levelTag.payloadLength; i++)
+    if(chunk._blockDataExists == 0) //block data not present
     {
-        nbtTag_t tag = ((nbtTag_t*)(levelTag.payload))[i];
-        if(strcmp(tag.name, "Sections") == 0)
-        {
-            sectionsTag = tag;
-            break;
-        }
+        *exitcode = 1;
+        return fail;
     }
-    nbtTag_t sectionTag;
-    char correctSectionFound = 0;
-    for(i=0;i<sectionsTag.payloadLength; i++)
+
+    char sectionId = y/16;
+    //printf("section id is %u\n", sectionId);
+    if(!(chunk.sectionPresent[sectionId]))
     {
-        nbtTag_t aSectionTag = ((nbtTag_t*)(sectionsTag.payload))[i];
-        nbtTag_t yTag;
-        for(j=0;j<aSectionTag.payloadLength; j++)
-        {
-            nbtTag_t tag = ((nbtTag_t*)(aSectionTag.payload))[j];
-            if(strcmp(tag.name, "Y") == 0)
-            {
-                yTag = tag;
-                break;
-            }
-        }
-        int ymin = (*((unsigned char*)(yTag.payload)))*16;
-        int ymax = ((*((unsigned char*)(yTag.payload)))+1)*16;
-        if(y>=ymin && y<ymax)
-        {
-            sectionTag = aSectionTag;
-            correctSectionFound = 1;
-            break;
-        }
+        blockData_t block;
+        block.id = 0;
+        block.meta = 0;
+        return block;
     }
-    if(!correctSectionFound)
-    {
-        fail.id = 0;
-        fail.meta = 0;
-        return fail; //not actually failing, returning air
-    }
-    char hasAdd = 0;
-    nbtTag_t blocksTag;
-    nbtTag_t addTag;
-    nbtTag_t dataTag;
-    for(i=0;i<sectionTag.payloadLength; i++)
-    {
-        nbtTag_t tag = ((nbtTag_t*)(sectionTag.payload))[i];
-        if(strcmp(tag.name, "Blocks") == 0)
-        {
-            printf("found blocks!\n");
-            blocksTag = tag;
-        }
-        if(strcmp(tag.name, "Add") == 0)
-        {
-            printf("found add!\n");
-            addTag = tag;
-            hasAdd = 1;
-        }
-        if(strcmp(tag.name, "Data") == 0)
-        {
-            printf("found data!\n");
-            dataTag = tag;
-        }
-    }
-    unsigned long blockOffset = x + z*16 + y*256;
+
+    unsigned long blockOffset = x + z*16 + (y%16)*256;
     unsigned long dataByteOffset = blockOffset/2;
     unsigned char dataByteHalf = (blockOffset % 2 == 0) ? 0 : 1;
-    unsigned char blockIdChar = ((unsigned char*)(blocksTag.payload))[blockOffset];
+    unsigned char blockIdChar = ((unsigned char*)(chunk.blockIds[sectionId]->payload))[blockOffset];
     unsigned short blockId = (unsigned short)blockIdChar;
-    if(hasAdd)
+    if(chunk.hasAdd[sectionId])
     {
-        unsigned char addByte = ((unsigned char*)(addTag.payload))[dataByteOffset];
+        unsigned char addByte = ((unsigned char*)(chunk.blockAdd[sectionId]->payload))[dataByteOffset];
         addByte = (addByte >> (4*dataByteHalf)) & 0x0F;
         unsigned short addVal = addByte << 8;
         blockId += addVal;
     }
-    unsigned char dataByte = ((unsigned char*)(dataTag.payload))[dataByteOffset];
+    unsigned char dataByte = ((unsigned char*)(chunk.blockMeta[sectionId]->payload))[dataByteOffset];
     dataByte = (dataByte >> (4*dataByteHalf)) & 0x0F;
     blockData_t block;
     block.id = blockId;
@@ -345,6 +450,58 @@ blockData_t getBlockIdInChunk(chunkRec_t chunk, int x, int y, int z, int* exitco
     return block;
 
 }
+
+//sets a block ID and meta given a chunk, block coords within that chunk (0<x<16, 0<z<16, 0<y<256), and a blockData_t
+//does not validate the block coords make any sense
+int setBlockIdInChunk(chunkRec_t* chunk, int x, int y, int z, blockData_t newBlock)
+{
+
+    if((x<0||x>15) || (z<0||z>15) || (y<0||x>256)) //bad coords
+    {
+        return 1;
+    }
+
+    if(chunk->size == 0) //chunk not present
+    {
+        return 1;
+    }
+
+    if(chunk->_blockDataExists == 0) //block data not present
+    {
+        return 1;
+    }
+
+    char sectionId = y/16;
+
+    unsigned long blockOffset = x + z*16 + (y%16)*256;
+    unsigned long dataByteOffset = blockOffset/2;
+    unsigned char dataByteHalf = (blockOffset % 2 == 0) ? 0 : 1;
+    unsigned char blockIdChar = newBlock.id & 255;
+    unsigned char blockAddNibble = (newBlock.id & 0x0F00)/256;
+    //printf("block id: %u, add: %u\n", blockIdChar, blockAddNibble);
+    ((unsigned char*)(chunk->blockIds[sectionId]->payload))[blockOffset] = blockIdChar;
+    if(blockAddNibble > 0)
+    {
+        if(!chunk->hasAdd[sectionId])
+        {
+            //init add
+        }
+
+        unsigned char addByte = ((unsigned char*)(chunk->blockAdd[sectionId]->payload))[dataByteOffset];
+        addByte &= (dataByteHalf ? 0x0F : 0xF0);
+        addByte |= (blockAddNibble >> (4*dataByteHalf));
+        ((unsigned char*)(chunk->blockAdd[sectionId]->payload))[dataByteOffset] = addByte;
+    }
+    unsigned char metaByte = ((unsigned char*)(chunk->blockMeta[sectionId]->payload))[dataByteOffset];
+    metaByte &= (dataByteHalf ? 0x0F : 0xF0);
+    metaByte |= (newBlock.meta >> (4*dataByteHalf));
+    ((unsigned char*)(chunk->blockMeta[sectionId]->payload))[dataByteOffset] = metaByte;
+    chunk->_uncompressedDataOutdated = 1;
+    chunk->_compressedDataOutdated = 1;
+    return 0;
+
+}
+
 
 void loadChunkData(chunkRec_t* chunk, FILE* fp)
 {
@@ -373,5 +530,13 @@ void freeChunk(chunkRec_t* chunk)
     if(chunk->_nbtDataExists)
     {
         freeTag(&(chunk->chunkData));
+    }
+    if(chunk->_blockDataExists)
+    {
+        free(chunk->blockMeta);
+        free(chunk->blockIds);
+        free(chunk->blockAdd);
+        free(chunk->hasAdd);
+        free(chunk->sectionPresent);
     }
 }

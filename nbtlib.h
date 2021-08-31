@@ -8,7 +8,7 @@ struct nbtTag {
     char* name;
     void* payload;
     char payloadTagType;
-    long long payloadLength; //used for Tag_ByteArray, Tag_String, Tag_List, Tag_Compound, Tag_IntArray, and Tag_LongArray
+    unsigned long long payloadLength; //used for Tag_ByteArray, Tag_String, Tag_List, Tag_Compound, Tag_IntArray, and Tag_LongArray
 };
 
 typedef struct nbtTag nbtTag_t;

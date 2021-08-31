@@ -413,6 +413,7 @@ unsigned char* encodeTag(nbtTag_t* tag, long long* length)
 
 nbtTag_t _decodeTag(unsigned char* bytes, char isNamed, char tagType, long long* length)
 {
+    char *bytesOrig = bytes;
     //_printContext(bytes);
     *length = 0;
     nbtTag_t tag;
@@ -473,7 +474,7 @@ nbtTag_t _decodeTag(unsigned char* bytes, char isNamed, char tagType, long long*
             tag.payload = (void*)(dataInt);
             break;
         case 4:
-            //printf("Found Tag_Long\n");
+            printf("Found Tag_Long\n");
             ; //empty statement because you can't start a case with a declaration
             long* dataLong = malloc(8*sizeof(char));
             *dataLong = (long)_decodeBigEndian(bytes, 8);
@@ -539,7 +540,10 @@ nbtTag_t _decodeTag(unsigned char* bytes, char isNamed, char tagType, long long*
             break;
         case 8:
             //printf("Found Tag_String\n");
+            //_printContext(bytes);
             tag.payloadLength = (int)(_decodeBigEndian(bytes, 2));
+            //printf("Name: %s, Payload length: %llu\n", tag.name, tag.payloadLength);
+            //fflush(stdout);
             bytes+=2;
             (*length)+=2;
             char* dataStr = malloc(tag.payloadLength*sizeof(char)+1);
@@ -654,7 +658,7 @@ nbtTag_t _decodeTag(unsigned char* bytes, char isNamed, char tagType, long long*
     {
         //printf("BAD TAG!!! Type: %d\n", tag.typeId);
     }
-    //printf("Tag done! %llu/%llu, nesting level: %u, in list: %u\n", *length, totalLen, nestingLevel, inList);
+    //printf("Tag done!\n");// %llu/%llu, nesting level: %u, in list: %u\n", *length, totalLen, nestingLevel, inList);
     return tag;
 }
 

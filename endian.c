@@ -1,12 +1,14 @@
 #include "endian.h"
 
+//utils for handling endianness
+
 int _decodeBigEndian(unsigned char* data, char size)
 {
     int value = 0;
     char i;
     for(i=0; i<size; i++)
     {
-        char theByte = *(data+i);
+        unsigned char theByte = *(data+i);
         //printf("%u/", theByte);
         value = value * 256; //left shift last byte
         value |= theByte;
