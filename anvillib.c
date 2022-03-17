@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "endian.h"
-#include "nbtlib.h"
+#include "nbtcore.h"
 #include "anvillib.h"
 #include "zlib.h"
 #include <string.h>
@@ -131,19 +131,6 @@ chunkRec_t* parseLocHeader(unsigned char* locs, unsigned char* timestamps)
     }
     return header; //return pointer to arr
 
-}
-
-unsigned char* resizeBlock(unsigned char* block, unsigned long size, unsigned long step)
-{
-    //printf("resizing!\n");
-    unsigned char* newBlock = malloc(sizeof(char)*(size+step));
-    int i;
-    for(i=0; i<size; i++)
-    {
-        newBlock[i] = block[i];
-    }
-    free(block);
-    return newBlock;
 }
 
 void inflateChunk(chunkRec_t* chunk)

@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "nbtlib.h"
+#include "nbtcore.h"
 #include "anvillib.h"
 #include <string.h>
 

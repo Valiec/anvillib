@@ -1,13 +1,23 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "nbtlib.h"
+#include "nbtcore.h"
 #include "anvillib.h"
 #include <string.h>
 
 int main(int argc, char** argv)
 {
     FILE* regionFp;
+    if (argc<2)
+    {
+        printf("Region file not specified. Exiting.\n");
+        exit(1);
+    }
     regionFp = fopen(argv[1], "rb+");
+    if (regionFp == NULL)
+    {
+        printf("Opening region file %s failed. Exiting.\n", argv[1]);
+        exit(1);
+    }
     unsigned char* locsRaw = malloc(sizeof(char)*4096); //alloc space for loc header data
     unsigned char* timestampsRaw = malloc(sizeof(char)*4096); //alloc space for loc header data
     fread(locsRaw, sizeof(char), 4096, regionFp); //read the header
@@ -45,8 +55,16 @@ int main(int argc, char** argv)
                             }
                             //printf("trying to write at y=%u, old block ID is %u, old block meta is %u\n", y, block.id, block.meta);
                             blockData_t new;
-                            new.id = 19;
-                            new.meta = 0;
+                            if(block.id == 2)
+                            {
+                                new.id = 3;
+                                new.meta = 1;
+                            }
+                            else
+                            {
+                                new.id = 19;
+                                new.meta = 0;
+                            }
                             setBlockIdInChunk(chunks+i, x, y, z, new);
                         }
                         //printf("getting block at y=%u again\n", y);

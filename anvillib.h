@@ -33,6 +33,13 @@ struct chunkRec {
 
 typedef struct chunkRec chunkRec_t;
 
+struct regionFile {
+    FILE* regionFp;
+    chunkRec_t* data;
+};
+
+typedef struct regionFile regionFile_t;
+
 struct blockData {
     unsigned short id;
     unsigned char meta;
@@ -45,8 +52,6 @@ unsigned int readUnsignedBigEndian(unsigned char* data, char size);
 chunkRec_t parseHeaderEntry(unsigned char* locs, unsigned char* timestamps);
 
 chunkRec_t* parseLocHeader(unsigned char* locs, unsigned char* timestamps);
-
-unsigned char* resizeBlock(unsigned char* block, unsigned long size, unsigned long step);
 
 void inflateChunk(chunkRec_t* chunk);
 
