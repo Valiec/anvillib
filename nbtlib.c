@@ -71,7 +71,7 @@ int deflateFile(nbtFile_t* data)
     stream.opaque = Z_NULL;
     stream.avail_in = data->sizeUncompressed;
     stream.next_in = data->uncompressedData; //data to deflate
-    returnVal = deflateInit(&stream, -1); //init deflate
+    returnVal = deflateInit2(&stream, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY); //init deflate
     stream.next_out = databuf; //decompressed data
     stream.avail_out = buflen;
     data->sizeCompressed = buflen;

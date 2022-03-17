@@ -73,8 +73,6 @@ int main(int argc, char** argv)
 
     levelDat->uncompressedData = encodeTag(&data, &length);
 
-
-
     free(levelDat);
     fclose(regionFp);
     return 0;
