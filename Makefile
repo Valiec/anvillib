@@ -1,13 +1,14 @@
 # This doesn't make the test files, just the library .a file.
 
 all:
-	gcc -c endian.c nbtcore.c anvillib.c
-	gcc -c endian.c nbtcore.c anvillib.c
-	ar cr libanvil.a anvillib.o nbtcore.o endian.o
+	mkdir -p target
+	gcc -c src/endian.c src/nbtcore.c src/anvillib.c
+	mv *.o target
+	ar cr target/libanvil.a target/anvillib.o target/nbtcore.o target/endian.o
 
 test:
-	gcc -lz test.c endian.c nbtcore.c anvillib.c
+	gcc -lz test/test.c src/endian.c src/nbtcore.c src/anvillib.c
 
 
 leveldat:
-	gcc -lz test_leveldat.c endian.c nbtlib.c nbtcore.c anvillib.c
+	gcc -lz test/test_leveldat.c src/endian.c src/nbtlib.c src/nbtcore.c src/anvillib.c
